@@ -129,14 +129,15 @@
       // Вставьте URL вашего Apps Script Web App (приёмник)
       const endpoint = 'https://script.google.com/macros/s/AKfycbzW4B3DkscSSHF1mgvwzXyCXQiDua594B7SYZ1kQAJR1rbd1ap6JwP0kYS5o2WiaxbQ/exec';
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+const res = await fetch(endpoint, {
+  method: 'POST',
+  headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+  body: JSON.stringify(payload)
+});
+const text = await res.text();
+if (!res.ok || text.trim() !== 'ok') throw new Error('Сервер ответил: ' + text);
+tg.close();
 
-      if (!res.ok) throw new Error('Ошибка отправки. Проверь URL и доступ Web App.');
-      tg.close();
     } catch (e) {
       alert(e.message || 'Проверь заполнение полей');
     }
