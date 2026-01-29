@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <!-- ✅ Жёстко отключаем зум (iOS/Telegram WebView): -->
+  <!-- Жёстко ограничиваем масштаб (Telegram iOS может частично игнорировать, но оставляем) -->
   <meta name="viewport"
         content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Добавить идею</title>
@@ -23,20 +23,38 @@
     .meta { font-size: 13px; color: #666; margin-bottom: 12px; }
     label { display:block; margin-top: 12px; font-weight: 700; }
 
-    /* ✅ Ключевое для iOS: font-size >= 16px на всех input/textarea */
-    textarea, input, select, button {
-      font-size: 16px;
-      line-height: 1.35;
-    }
+    /* ✅ Важно для iOS: минимум 16px (и жёстко) */
+    input, button, select { font-size: 16px !important; line-height: 1.35 !important; }
 
-    textarea, input {
+    input {
       width: 100%;
       padding: 10px;
       border: 1px solid #ccc;
       border-radius: 10px;
       box-sizing: border-box;
     }
-    textarea { min-height: 90px; resize: none; }
+
+    /* ✅ Вместо textarea используем contenteditable — iOS не делает focus-zoom так агрессивно */
+    .editable{
+      width: 100%;
+      min-height: 110px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      box-sizing: border-box;
+      font-size: 16px !important;
+      line-height: 1.35 !important;
+      outline: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+      -webkit-user-select: text;
+      user-select: text;
+      background: #fff;
+    }
+    .editable:empty:before{
+      content: attr(data-placeholder);
+      color: #aaa;
+    }
 
     .chips { display:flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .chip {
@@ -46,7 +64,7 @@
       cursor: pointer;
       user-select: none;
       font-size: 14px;
-      touch-action: manipulation; /* ✅ снижает “умный” зум/дабл-тап */
+      touch-action: manipulation;
     }
     .chip.active { border-color: #2AABEE; }
 
@@ -75,13 +93,13 @@
     <div class="meta" id="meta"></div>
 
     <label>1) Опиши свою идею <span style="color:#c00">*</span></label>
-    <textarea id="idea" placeholder="Подробно и по делу"></textarea>
+    <div id="idea" class="editable" contenteditable="true" data-placeholder="Подробно и по делу"></div>
 
     <label>2) Почему идея перспективна / какая выгода? <span style="color:#c00">*</span></label>
-    <textarea id="value" placeholder="Какую пользу и выгоды данная идея принесёт?"></textarea>
+    <div id="value" class="editable" contenteditable="true" data-placeholder="Какую пользу и выгоды данная идея принесёт?"></div>
 
     <label>3) Потенциальные риски <span style="color:#c00">*</span></label>
-    <textarea id="risks" placeholder="Какие минусы / ограничения / риски ты видишь?"></textarea>
+    <div id="risks" class="editable" contenteditable="true" data-placeholder="Какие минусы / ограничения / риски ты видишь?"></div>
 
     <label>4) Направление (можно несколько) <span style="color:#c00">*</span></label>
     <div class="chips" id="dirs">
@@ -112,13 +130,11 @@
   </div>
 
 <script>
-  // ✅ Жёстко отключаем pinch/double-tap zoom в iOS WebView
-  // (Telegram iOS часто зумит даже при 16px — это добивает до “вообще никогда”)
+  // Доп. попытка убрать жесты масштабирования (pinch/double-tap)
   document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
   document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
   document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
 
-  // Double-tap prevention (iOS)
   let lastTouchEnd = 0;
   document.addEventListener('touchend', (e) => {
     const now = Date.now();
@@ -129,9 +145,11 @@
   const tg = window.Telegram?.WebApp;
   if (tg) tg.expand();
 
+  // ====== CONFIG ======
   const endpoint = 'https://script.google.com/macros/s/AKfycbzW4B3DkscSSHF1mgvwzXyCXQiDua594B7SYZ1kQAJR1rbd1ap6JwP0kYS5o2WiaxbQ/exec';
   const CLOSE_AFTER_SUCCESS = true;
 
+  // ====== USER + META ======
   const user = tg?.initDataUnsafe?.user || {};
   const username = user.username ? '@' + user.username : '(без username)';
 
@@ -141,6 +159,7 @@
   }
   setMeta(new Date());
 
+  // ====== Multi-select chips ======
   const selected = new Set();
   const chips = Array.from(document.querySelectorAll('.chip'));
   const otherWrap = document.getElementById('otherWrap');
@@ -162,14 +181,19 @@
     });
   });
 
+  function getText(id) {
+    // innerText сохраняет переносы строк адекватно для pre-wrap
+    return (document.getElementById(id).innerText || '').trim();
+  }
+
   function requireVal(val, msg) {
     if (!val || !val.trim()) throw new Error(msg);
   }
 
   function clearForm() {
-    document.getElementById('idea').value = '';
-    document.getElementById('value').value = '';
-    document.getElementById('risks').value = '';
+    document.getElementById('idea').innerText = '';
+    document.getElementById('value').innerText = '';
+    document.getElementById('risks').innerText = '';
     document.getElementById('prio').value = '3';
     document.getElementById('dirOther').value = '';
 
@@ -192,15 +216,23 @@
     else alert('❌ ' + msg);
   }
 
+  // Удобно: фокус по тапу, чтобы курсор появлялся сразу
+  ['idea','value','risks'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('click', () => {
+      // no-op: просто чтобы iOS уверенно ставил курсор
+    });
+  });
+
   document.getElementById('submit').onclick = async () => {
     const btn = document.getElementById('submit');
     btn.disabled = true;
     btn.textContent = 'Отправляем...';
 
     try {
-      const idea  = document.getElementById('idea').value;
-      const value = document.getElementById('value').value;
-      const risks = document.getElementById('risks').value;
+      const idea  = getText('idea');
+      const value = getText('value');
+      const risks = getText('risks');
       const prio  = Number(document.getElementById('prio').value || 3);
       const dirOther = document.getElementById('dirOther').value;
 
@@ -220,13 +252,14 @@
         priority: prio
       };
 
-      let res, text;
-      res = await fetch(endpoint, {
+      // ВАЖНО: text/plain -> не вызывает CORS preflight
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body: JSON.stringify(payload)
       });
-      text = await res.text();
+
+      const text = await res.text();
       if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + text);
 
       let data;
@@ -236,6 +269,7 @@
         if (String(text).trim() === 'ok') data = { ok: true, ideaId: '' };
         else throw new Error('Неожиданный ответ сервера: ' + text);
       }
+
       if (!data.ok) throw new Error('Сервер ответил ошибкой: ' + (data.error || text));
 
       await showSuccess(data.ideaId || '');
@@ -255,4 +289,3 @@
 </script>
 </body>
 </html>
-
