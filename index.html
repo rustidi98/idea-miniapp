@@ -22,6 +22,7 @@
     .row { display:flex; gap: 10px; }
     .row > div { flex: 1; }
     button { width: 100%; margin-top: 16px; padding: 12px; border: 0; border-radius: 12px; cursor: pointer; font-weight: 800; }
+    button[disabled] { opacity: .6; cursor: not-allowed; }
     .hint { margin-top: 8px; font-size: 13px; color:#666; }
   </style>
 </head>
@@ -64,19 +65,28 @@
     </div>
 
     <button id="submit">Отправить в таблицу</button>
-    <div class="hint">Ник и дата подтянутся автоматически. После отправки форма закроется.</div>
+    <div class="hint">Ник и дата подтянутся автоматически. После отправки будет подтверждение и форма очистится.</div>
   </div>
 
 <script>
-  const tg = window.Telegram.WebApp;
-  tg.expand();
+  const tg = window.Telegram?.WebApp;
+  if (tg) tg.expand();
 
-  const user = tg.initDataUnsafe?.user || {};
+  // ====== CONFIG ======
+  const endpoint = 'https://script.google.com/macros/s/AKfycbzW4B3DkscSSHF1mgvwzXyCXQiDua594B7SYZ1kQAJR1rbd1ap6JwP0kYS5o2WiaxbQ/exec';
+  const CLOSE_AFTER_SUCCESS = true; // поставь false, если не хочешь закрывать мини-апп
+
+  // ====== USER + META ======
+  const user = tg?.initDataUnsafe?.user || {};
   const username = user.username ? '@' + user.username : '(без username)';
-  const now = new Date();
-  document.getElementById('meta').textContent = `Отправитель: ${username} • Дата: ${now.toLocaleString()}`;
 
-  // Multi-select chips
+  function setMeta(dateObj) {
+    document.getElementById('meta').textContent =
+      `Отправитель: ${username} • Дата: ${dateObj.toLocaleString()}`;
+  }
+  setMeta(new Date());
+
+  // ====== Multi-select chips ======
   const selected = new Set();
   const chips = Array.from(document.querySelectorAll('.chip'));
   const otherWrap = document.getElementById('otherWrap');
@@ -98,11 +108,42 @@
     });
   });
 
-  function require(val, msg) {
+  function requireVal(val, msg) {
     if (!val || !val.trim()) throw new Error(msg);
   }
 
+  function clearForm() {
+    document.getElementById('idea').value = '';
+    document.getElementById('value').value = '';
+    document.getElementById('risks').value = '';
+    document.getElementById('prio').value = '3';
+    document.getElementById('dirOther').value = '';
+
+    selected.clear();
+    chips.forEach(ch => ch.classList.remove('active'));
+    syncOther();
+
+    setMeta(new Date());
+  }
+
+  async function showSuccess(ideaId) {
+    const msg = ideaId ? `Идея ${ideaId} отправлена в таблицу.` : 'Идея отправлена в таблицу.';
+    if (tg?.showPopup) {
+      tg.showPopup({
+        title: "Готово ✅",
+        message: msg,
+        buttons: [{ id: "ok", type: "default", text: "Ок" }]
+      });
+    } else {
+      alert("✅ " + msg);
+    }
+  }
+
   document.getElementById('submit').onclick = async () => {
+    const btn = document.getElementById('submit');
+    btn.disabled = true;
+    btn.textContent = 'Отправляем...';
+
     try {
       const idea  = document.getElementById('idea').value;
       const value = document.getElementById('value').value;
@@ -110,36 +151,76 @@
       const prio  = Number(document.getElementById('prio').value || 3);
       const dirOther = document.getElementById('dirOther').value;
 
-      require(idea,  'Заполни поле: Опиши свою идею');
-      require(value, 'Заполни поле: Почему перспективна / выгода');
-      require(risks, 'Заполни поле: Потенциальные риски');
+      requireVal(idea,  'Заполни поле: Опиши свою идею');
+      requireVal(value, 'Заполни поле: Почему перспективна / выгода');
+      requireVal(risks, 'Заполни поле: Потенциальные риски');
       if (selected.size === 0) throw new Error('Выбери хотя бы одно направление');
       if (prio < 1 || prio > 5) throw new Error('Приоритет должен быть от 1 до 5');
-      if (selected.has('Другое')) require(dirOther, 'Укажи "Другое"');
+      if (selected.has('Другое')) requireVal(dirOther, 'Укажи "Другое"');
 
       const payload = {
-        submittedAt: now.toISOString(),
-        user: { id: user.id || '', username: user.username || '', first_name: user.first_name || '', last_name: user.last_name || '' },
+        submittedAt: new Date().toISOString(),
+        user: {
+          id: user.id || '',
+          username: user.username || '',
+          first_name: user.first_name || '',
+          last_name: user.last_name || ''
+        },
         idea, value, risks,
         directions: Array.from(selected),
         directionOther: dirOther,
         priority: prio
       };
 
-      // Вставьте URL вашего Apps Script Web App (приёмник)
-      const endpoint = 'https://script.google.com/macros/s/AKfycbzW4B3DkscSSHF1mgvwzXyCXQiDua594B7SYZ1kQAJR1rbd1ap6JwP0kYS5o2WiaxbQ/exec';
+      // ВАЖНО: text/plain -> не вызывает CORS preflight
+      let res, text;
+      try {
+        res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: JSON.stringify(payload)
+        });
+        text = await res.text();
+      } catch (err) {
+        throw new Error('Fetch error: ' + (err?.message || err));
+      }
 
-const res = await fetch(endpoint, {
-  method: 'POST',
-  headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-  body: JSON.stringify(payload)
-});
-const text = await res.text();
-if (!res.ok || text.trim() !== 'ok') throw new Error('Сервер ответил: ' + text);
-tg.close();
+      if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + text);
+
+      // Ожидаем JSON: { ok: true, ideaId: "I...." }
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // fallback: если вдруг сервер вернул просто "ok"
+        if (String(text).trim() === 'ok') data = { ok: true, ideaId: '' };
+        else throw new Error('Неожиданный ответ сервера: ' + text);
+      }
+
+      if (!data.ok) throw new Error('Сервер ответил ошибкой: ' + (data.error || text));
+
+      await showSuccess(data.ideaId || '');
+      clearForm();
+
+      if (CLOSE_AFTER_SUCCESS && tg?.close) {
+        setTimeout(() => {
+          try { tg.close(); } catch(e) {}
+        }, 600);
+      }
 
     } catch (e) {
-      alert(e.message || 'Проверь заполнение полей');
+      if (tg?.showPopup) {
+        tg.showPopup({
+          title: "Ошибка ❌",
+          message: (e && e.message) ? e.message : 'Проверь заполнение полей',
+          buttons: [{ type: "default", text: "Ок" }]
+        });
+      } else {
+        alert((e && e.message) ? e.message : 'Проверь заполнение полей');
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Отправить в таблицу';
     }
   };
 </script>
