@@ -2,31 +2,39 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <!-- ✅ Жёстко отключаем зум (iOS/Telegram WebView): -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Добавить идею</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
   <style>
     html, body { height: 100%; }
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       padding: 16px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       -webkit-text-size-adjust: 100%;
+      overscroll-behavior: none;
     }
 
     .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; }
     h2 { margin: 0 0 12px 0; }
     .meta { font-size: 13px; color: #666; margin-bottom: 12px; }
-
     label { display:block; margin-top: 12px; font-weight: 700; }
+
+    /* ✅ Ключевое для iOS: font-size >= 16px на всех input/textarea */
+    textarea, input, select, button {
+      font-size: 16px;
+      line-height: 1.35;
+    }
+
     textarea, input {
       width: 100%;
       padding: 10px;
       border: 1px solid #ccc;
       border-radius: 10px;
       box-sizing: border-box;
-      font-size: 16px;         /* ✅ важно: iOS не будет зумить */
-      line-height: 1.35;
     }
     textarea { min-height: 90px; resize: none; }
 
@@ -38,6 +46,7 @@
       cursor: pointer;
       user-select: none;
       font-size: 14px;
+      touch-action: manipulation; /* ✅ снижает “умный” зум/дабл-тап */
     }
     .chip.active { border-color: #2AABEE; }
 
@@ -52,8 +61,7 @@
       border-radius: 12px;
       cursor: pointer;
       font-weight: 800;
-      font-size: 16px;         /* ✅ тоже 16px */
-      line-height: 1.2;
+      touch-action: manipulation;
     }
     button[disabled] { opacity: .6; cursor: not-allowed; }
 
@@ -104,14 +112,26 @@
   </div>
 
 <script>
+  // ✅ Жёстко отключаем pinch/double-tap zoom в iOS WebView
+  // (Telegram iOS часто зумит даже при 16px — это добивает до “вообще никогда”)
+  document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+  document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
+  document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
+
+  // Double-tap prevention (iOS)
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) e.preventDefault();
+    lastTouchEnd = now;
+  }, { passive: false });
+
   const tg = window.Telegram?.WebApp;
   if (tg) tg.expand();
 
-  // ====== CONFIG ======
   const endpoint = 'https://script.google.com/macros/s/AKfycbzW4B3DkscSSHF1mgvwzXyCXQiDua594B7SYZ1kQAJR1rbd1ap6JwP0kYS5o2WiaxbQ/exec';
-  const CLOSE_AFTER_SUCCESS = true; // false = не закрывать мини-апп после успеха
+  const CLOSE_AFTER_SUCCESS = true;
 
-  // ====== USER + META ======
   const user = tg?.initDataUnsafe?.user || {};
   const username = user.username ? '@' + user.username : '(без username)';
 
@@ -121,7 +141,6 @@
   }
   setMeta(new Date());
 
-  // ====== Multi-select chips ======
   const selected = new Set();
   const chips = Array.from(document.querySelectorAll('.chip'));
   const otherWrap = document.getElementById('otherWrap');
@@ -163,24 +182,14 @@
 
   async function showSuccess(ideaId) {
     const msg = ideaId ? `✅ Идея ${ideaId} отправлена в таблицу.` : '✅ Идея отправлена в таблицу.';
-    if (tg?.showAlert) {
-      tg.showAlert(msg);
-    } else if (tg?.showPopup) {
-      tg.showPopup({ title: "Готово ✅", message: msg, buttons: [{ type: "default", text: "Ок" }] });
-    } else {
-      alert(msg);
-    }
+    if (tg?.showAlert) tg.showAlert(msg);
+    else alert(msg);
   }
 
   async function showError(message) {
     const msg = message || 'Проверь заполнение полей';
-    if (tg?.showAlert) {
-      tg.showAlert('❌ ' + msg);
-    } else if (tg?.showPopup) {
-      tg.showPopup({ title: "Ошибка ❌", message: msg, buttons: [{ type: "default", text: "Ок" }] });
-    } else {
-      alert('❌ ' + msg);
-    }
+    if (tg?.showAlert) tg.showAlert('❌ ' + msg);
+    else alert('❌ ' + msg);
   }
 
   document.getElementById('submit').onclick = async () => {
@@ -204,34 +213,22 @@
 
       const payload = {
         submittedAt: new Date().toISOString(),
-        user: {
-          id: user.id || '',
-          username: user.username || '',
-          first_name: user.first_name || '',
-          last_name: user.last_name || ''
-        },
+        user: { id: user.id || '', username: user.username || '', first_name: user.first_name || '', last_name: user.last_name || '' },
         idea, value, risks,
         directions: Array.from(selected),
         directionOther: dirOther,
         priority: prio
       };
 
-      // ✅ text/plain чтобы не было CORS preflight
       let res, text;
-      try {
-        res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-          body: JSON.stringify(payload)
-        });
-        text = await res.text();
-      } catch (err) {
-        throw new Error('Fetch error: ' + (err?.message || err));
-      }
-
+      res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify(payload)
+      });
+      text = await res.text();
       if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + text);
 
-      // ✅ ожидаем JSON: { ok: true, ideaId: "I...." }
       let data;
       try {
         data = JSON.parse(text);
@@ -239,7 +236,6 @@
         if (String(text).trim() === 'ok') data = { ok: true, ideaId: '' };
         else throw new Error('Неожиданный ответ сервера: ' + text);
       }
-
       if (!data.ok) throw new Error('Сервер ответил ошибкой: ' + (data.error || text));
 
       await showSuccess(data.ideaId || '');
