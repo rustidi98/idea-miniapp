@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Добавить идею</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 16px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; }
+    h2 { margin: 0 0 12px 0; }
+    .meta { font-size: 13px; color: #666; margin-bottom: 12px; }
+    label { display:block; margin-top: 12px; font-weight: 700; }
+    textarea, input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 10px; box-sizing: border-box; }
+    textarea { min-height: 90px; }
+    .chips { display:flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .chip {
+      padding: 8px 10px; border: 1px solid #ccc; border-radius: 999px;
+      cursor: pointer; user-select: none; font-size: 14px;
+    }
+    .chip.active { border-color: #2AABEE; }
+    .row { display:flex; gap: 10px; }
+    .row > div { flex: 1; }
+    button { width: 100%; margin-top: 16px; padding: 12px; border: 0; border-radius: 12px; cursor: pointer; font-weight: 800; }
+    .hint { margin-top: 8px; font-size: 13px; color:#666; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Добавить идею 💡</h2>
+    <div class="meta" id="meta"></div>
+
+    <label>1) Опиши свою идею <span style="color:#c00">*</span></label>
+    <textarea id="idea" placeholder="Подробно и по делу"></textarea>
+
+    <label>2) Почему идея перспективна / какая выгода? <span style="color:#c00">*</span></label>
+    <textarea id="value" placeholder="Какую пользу и выгоды данная идея принесёт?"></textarea>
+
+    <label>3) Потенциальные риски <span style="color:#c00">*</span></label>
+    <textarea id="risks" placeholder="Какие минусы / ограничения / риски ты видишь?"></textarea>
+
+    <label>4) Направление (можно несколько) <span style="color:#c00">*</span></label>
+    <div class="chips" id="dirs">
+      <div class="chip" data-val="Маркетинг">Маркетинг</div>
+      <div class="chip" data-val="Продажи">Продажи</div>
+      <div class="chip" data-val="Продукт">Продукт</div>
+      <div class="chip" data-val="Финансы">Финансы</div>
+      <div class="chip" data-val="Техническая часть">Техническая часть</div>
+      <div class="chip" data-val="Продление">Продление</div>
+      <div class="chip" data-val="Юридическая часть">Юридическая часть</div>
+      <div class="chip" data-val="Другое">Другое</div>
+    </div>
+
+    <div id="otherWrap" style="display:none;">
+      <label>Другое (укажи)</label>
+      <input id="dirOther" placeholder="Например: партнёрства, HR, поддержка...">
+    </div>
+
+    <div class="row">
+      <div>
+        <label>5) Укажи приоритет идеи (1–5) <span style="color:#c00">*</span></label>
+        <input id="prio" type="number" min="1" max="5" value="3">
+      </div>
+    </div>
+
+    <button id="submit">Отправить в таблицу</button>
+    <div class="hint">Ник и дата подтянутся автоматически. После отправки форма закроется.</div>
+  </div>
+
+<script>
+  const tg = window.Telegram.WebApp;
+  tg.expand();
+
+  const user = tg.initDataUnsafe?.user || {};
+  const username = user.username ? '@' + user.username : '(без username)';
+  const now = new Date();
+  document.getElementById('meta').textContent = `Отправитель: ${username} • Дата: ${now.toLocaleString()}`;
+
+  // Multi-select chips
+  const selected = new Set();
+  const chips = Array.from(document.querySelectorAll('.chip'));
+  const otherWrap = document.getElementById('otherWrap');
+
+  function syncOther() {
+    if (selected.has('Другое')) otherWrap.style.display = 'block';
+    else {
+      otherWrap.style.display = 'none';
+      document.getElementById('dirOther').value = '';
+    }
+  }
+
+  chips.forEach(ch => {
+    ch.addEventListener('click', () => {
+      const v = ch.dataset.val;
+      if (selected.has(v)) { selected.delete(v); ch.classList.remove('active'); }
+      else { selected.add(v); ch.classList.add('active'); }
+      syncOther();
+    });
+  });
+
+  function require(val, msg) {
+    if (!val || !val.trim()) throw new Error(msg);
+  }
+
+  document.getElementById('submit').onclick = async () => {
+    try {
+      const idea  = document.getElementById('idea').value;
+      const value = document.getElementById('value').value;
+      const risks = document.getElementById('risks').value;
+      const prio  = Number(document.getElementById('prio').value || 3);
+      const dirOther = document.getElementById('dirOther').value;
+
+      require(idea,  'Заполни поле: Опиши свою идею');
+      require(value, 'Заполни поле: Почему перспективна / выгода');
+      require(risks, 'Заполни поле: Потенциальные риски');
+      if (selected.size === 0) throw new Error('Выбери хотя бы одно направление');
+      if (prio < 1 || prio > 5) throw new Error('Приоритет должен быть от 1 до 5');
+      if (selected.has('Другое')) require(dirOther, 'Укажи "Другое"');
+
+      const payload = {
+        submittedAt: now.toISOString(),
+        user: { id: user.id || '', username: user.username || '', first_name: user.first_name || '', last_name: user.last_name || '' },
+        idea, value, risks,
+        directions: Array.from(selected),
+        directionOther: dirOther,
+        priority: prio
+      };
+
+      // Вставьте URL вашего Apps Script Web App (приёмник)
+      const endpoint = 'PASTE_GAS_WEBAPP_URL';
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error('Ошибка отправки. Проверь URL и доступ Web App.');
+      tg.close();
+    } catch (e) {
+      alert(e.message || 'Проверь заполнение полей');
+    }
+  };
+</script>
+</body>
+</html>
