@@ -9,6 +9,21 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
   <style>
+    :root{
+      /* дефолт (светлая тема) */
+      --bg: #ffffff;
+      --card: #ffffff;
+      --text: #111111;
+      --hint: #6b6b6b;
+      --border: #dddddd;
+      --input-bg: #ffffff;
+      --input-text: #111111;
+      --placeholder: #9aa0a6;
+      --accent: #2AABEE;
+      --danger: #c00;
+      --shadow: 0 6px 20px rgba(0,0,0,.06);
+    }
+
     html, body { height: 100%; }
     body {
       margin: 0;
@@ -16,12 +31,23 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       -webkit-text-size-adjust: 100%;
       overscroll-behavior: none;
+      background: var(--bg);
+      color: var(--text);
     }
 
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+
     h2 { margin: 0 0 12px 0; }
-    .meta { font-size: 13px; color: #666; margin-bottom: 12px; }
+    .meta { font-size: 13px; color: var(--hint); margin-bottom: 12px; }
     label { display:block; margin-top: 12px; font-weight: 700; }
+
+    .req { color: var(--danger); }
 
     /* ✅ Важно для iOS: минимум 16px (и жёстко) */
     input, button, select { font-size: 16px !important; line-height: 1.35 !important; }
@@ -29,18 +55,23 @@
     input {
       width: 100%;
       padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
       box-sizing: border-box;
+      background: var(--input-bg);
+      color: var(--input-text);
+      outline: none;
     }
 
-    /* ✅ Вместо textarea используем contenteditable — iOS не делает focus-zoom так агрессивно */
+    input::placeholder { color: var(--placeholder); }
+
+    /* ✅ contenteditable вместо textarea (меньше проблем с iOS zoom) */
     .editable{
       width: 100%;
       min-height: 110px;
       padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
       box-sizing: border-box;
       font-size: 16px !important;
       line-height: 1.35 !important;
@@ -49,24 +80,32 @@
       word-break: break-word;
       -webkit-user-select: text;
       user-select: text;
-      background: #fff;
+      background: var(--input-bg);
+      color: var(--input-text);
+      caret-color: var(--accent);
     }
     .editable:empty:before{
       content: attr(data-placeholder);
-      color: #aaa;
+      color: var(--placeholder);
     }
 
     .chips { display:flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .chip {
-      padding: 8px 10px;
-      border: 1px solid #ccc;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
       border-radius: 999px;
       cursor: pointer;
       user-select: none;
       font-size: 14px;
       touch-action: manipulation;
+      color: var(--text);
+      background: transparent;
     }
-    .chip.active { border-color: #2AABEE; }
+    .chip.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(42,171,238,.08);
+    }
 
     .row { display:flex; gap: 10px; }
     .row > div { flex: 1; }
@@ -76,14 +115,23 @@
       margin-top: 16px;
       padding: 12px;
       border: 0;
-      border-radius: 12px;
+      border-radius: 14px;
       cursor: pointer;
       font-weight: 800;
       touch-action: manipulation;
+      background: var(--accent);
+      color: #fff;
     }
-    button[disabled] { opacity: .6; cursor: not-allowed; }
+    button[disabled] { opacity: .7; cursor: not-allowed; }
 
-    .hint { margin-top: 8px; font-size: 13px; color:#666; }
+    .hint { margin-top: 8px; font-size: 13px; color: var(--hint); }
+
+    /* Чуть лучше выглядит на маленьких экранах */
+    @media (max-width: 380px) {
+      body { padding: 12px; }
+      .card { padding: 14px; }
+      .editable { min-height: 100px; }
+    }
   </style>
 </head>
 
@@ -92,16 +140,16 @@
     <h2>Добавить идею 💡</h2>
     <div class="meta" id="meta"></div>
 
-    <label>1) Опиши свою идею <span style="color:#c00">*</span></label>
+    <label>1) Опиши свою идею <span class="req">*</span></label>
     <div id="idea" class="editable" contenteditable="true" data-placeholder="Подробно и по делу"></div>
 
-    <label>2) Почему идея перспективна / какая выгода? <span style="color:#c00">*</span></label>
+    <label>2) Почему идея перспективна / какая выгода? <span class="req">*</span></label>
     <div id="value" class="editable" contenteditable="true" data-placeholder="Какую пользу и выгоды данная идея принесёт?"></div>
 
-    <label>3) Потенциальные риски <span style="color:#c00">*</span></label>
+    <label>3) Потенциальные риски <span class="req">*</span></label>
     <div id="risks" class="editable" contenteditable="true" data-placeholder="Какие минусы / ограничения / риски ты видишь?"></div>
 
-    <label>4) Направление (можно несколько) <span style="color:#c00">*</span></label>
+    <label>4) Направление (можно несколько) <span class="req">*</span></label>
     <div class="chips" id="dirs">
       <div class="chip" data-val="Маркетинг">Маркетинг</div>
       <div class="chip" data-val="Продажи">Продажи</div>
@@ -118,12 +166,12 @@
 
     <div id="otherWrap" style="display:none;">
       <label>Другое (укажи)</label>
-      <input id="dirOther" placeholder="Например: партнёрства, HR, поддержка...">
+      <input id="dirOther" placeholder="Например: партнёрства, HR, поддержка..." autocomplete="off">
     </div>
 
     <div class="row">
       <div>
-        <label>5) Укажи приоритет идеи (1–5) <span style="color:#c00">*</span></label>
+        <label>5) Укажи приоритет идеи (1–5) <span class="req">*</span></label>
         <input id="prio" type="number" min="1" max="5" value="3" inputmode="numeric">
       </div>
     </div>
@@ -133,7 +181,7 @@
   </div>
 
 <script>
-  // Доп. попытка убрать жесты масштабирования (pinch/double-tap)
+  // ====== Anti-zoom gestures (iOS) ======
   document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
   document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
   document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
@@ -145,8 +193,37 @@
     lastTouchEnd = now;
   }, { passive: false });
 
+  // ====== Telegram init ======
   const tg = window.Telegram?.WebApp;
   if (tg) tg.expand();
+
+  // ====== Theme support (Telegram light/dark) ======
+  function applyTheme() {
+    if (!tg) return;
+    const t = tg.themeParams || {};
+
+    // Telegram отдаёт цвета в hex, используем их как есть
+    document.documentElement.style.setProperty('--bg', t.bg_color || '#ffffff');
+    document.documentElement.style.setProperty('--card', t.secondary_bg_color || '#ffffff');
+    document.documentElement.style.setProperty('--text', t.text_color || '#111111');
+    document.documentElement.style.setProperty('--hint', t.hint_color || '#6b6b6b');
+    document.documentElement.style.setProperty('--border', t.separator_color || '#dddddd');
+    document.documentElement.style.setProperty('--input-bg', t.secondary_bg_color || t.bg_color || '#ffffff');
+    document.documentElement.style.setProperty('--input-text', t.text_color || '#111111');
+    document.documentElement.style.setProperty('--accent', t.button_color || '#2AABEE');
+
+    // placeholder: если Telegram дал link_color — возьмём его как более мягкий оттенок
+    document.documentElement.style.setProperty('--placeholder', t.hint_color || '#9aa0a6');
+
+    // тень в тёмной теме делаем мягче/меньше
+    const isDark = (tg.colorScheme === 'dark');
+    document.documentElement.style.setProperty('--shadow', isDark ? 'none' : '0 6px 20px rgba(0,0,0,.06)');
+  }
+
+  if (tg) {
+    applyTheme();
+    tg.onEvent('themeChanged', applyTheme);
+  }
 
   // ====== CONFIG ======
   const endpoint = 'https://script.google.com/macros/s/AKfycbygVSRl-g8D-8iTFISwy_IS2J0H7FG0jKjutxwfq_OzcFsCKaQYMC8QOoS0cZDGtqqE/exec';
@@ -184,8 +261,8 @@
     });
   });
 
+  // ====== Helpers ======
   function getText(id) {
-    // innerText сохраняет переносы строк адекватно для pre-wrap
     return (document.getElementById(id).innerText || '').trim();
   }
 
@@ -205,6 +282,9 @@
     syncOther();
 
     setMeta(new Date());
+
+    // прокрутка наверх после очистки (приятнее на мобиле)
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function showSuccess(ideaId) {
@@ -219,14 +299,7 @@
     else alert('❌ ' + msg);
   }
 
-  // Удобно: фокус по тапу, чтобы курсор появлялся сразу
-  ['idea','value','risks'].forEach(id => {
-    const el = document.getElementById(id);
-    el.addEventListener('click', () => {
-      // no-op: просто чтобы iOS уверенно ставил курсор
-    });
-  });
-
+  // ====== Submit ======
   document.getElementById('submit').onclick = async () => {
     const btn = document.getElementById('submit');
     btn.disabled = true;
